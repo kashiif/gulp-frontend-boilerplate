@@ -47,6 +47,7 @@
     "eslint-plugin-import": "^2.0.x",
     "eslint-plugin-jsx-a11y": "^2.2.x",
     "eslint-plugin-react": "^6.3.x",
+    "event-stream": "^3.3.4",
     "favicons": "^4.7.x",
     "fontmin": "^0.9.x",
     "gulp": "github:gulpjs/gulp#4.0",
@@ -92,6 +93,7 @@
     "dist": "./dist",
     "test": "./test"
   },
+  "bundles":[],
   "babel": {
     "presets": [
       "es2015"

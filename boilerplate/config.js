@@ -33,7 +33,8 @@ export function updateConfig(done) {
     description: pkg.description,
     author: pkg.author,
     extensions: pkg.extensions,
-    vendors: pkg.vendors
+    vendors: pkg.vendors,
+    bundles: pkg.bundles || []
   }, pkg.config, pkg.directories);
 
   done();

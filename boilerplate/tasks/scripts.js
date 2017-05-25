@@ -1,3 +1,4 @@
+import path from 'path';
 import gulp from 'gulp';
 import { exec } from 'child_process';
 
@@ -17,47 +18,99 @@ import bundleLogger from '../utils/bundleLogger';
 import handleErrors from '../utils/handleErrors';
 import concatenateFiles from '../utils/concatenateFiles';
 
+import es from 'event-stream';
+
 const envDev = config.args.env === 'dev';
 
-const b = browserify({
-  entries: [`${config.src}/scripts/main.${config.extensions.scripts}`],
-  extensions: [config.extensions.scripts],
-  debug: envDev,
-  cache: {},
-  packageCache: {},
-  fullPaths: envDev
-});
-
-const bundler = envDev ? watchify(b) : b;
+const files = [
+  `main.${config.extensions.scripts}`,
+].concat(config.bundles);
 
 const bundle = (done) => {
+
   bundleLogger.start();
 
-  return bundler
-    .bundle()
-    .on('error', handleErrors)
-    .pipe(source('main.js'))
-    .pipe(buffer())
-    .pipe(envDev ? gutil.noop() : uglify())
-    .on('error', handleErrors)
-    .pipe(envDev ? gutil.noop() : header(config.banner))
-    .pipe(envDev ? gutil.noop() : rename({
-      suffix: '.min'
-    }))
-    .on('end', () => {
-      if (envDev) {
-        reload(() => {});
-      } else {
-        done();
+  // map them to our stream function
+  const streams = files.map((entry) => {
+
+    let entries,
+        entryLibName = null;
+    if (typeof entry === 'string') {
+      entries = [entry];
+      entryLibName = entry;
+    }
+    else {
+      let allKeys = Object.keys(entry);
+
+      if (allKeys.length) {
+        entryLibName = allKeys[0];
+        entries = entry[entryLibName];
+        entries = typeof entries === 'string'? [entries] : entries;
       }
-      bundleLogger.end();
-    })
-    .pipe(gulp.dest(`${config.dist}/scripts`));
+    }
+
+    entries = entries.map((filePath) => {
+      return path.join(`${config.src}/scripts/`, filePath);
+    });
+
+    const b = browserify({
+      entries: entries,
+      extensions: [config.extensions.scripts],
+      debug: envDev,
+      cache: {},
+      packageCache: {},
+      fullPaths: envDev
+    });
+
+    const bundler = envDev ? watchify(b) : b;
+
+    function singleBundle() {
+      const outputPath = path.join(`${config.dist}/scripts`, path.dirname(entryLibName));
+
+      return bundler
+        .bundle()
+        .on('error', handleErrors)
+        .pipe(source(path.basename(entryLibName)))
+        .on('error', handleErrors)
+        .pipe(buffer())
+        .on('error', handleErrors)
+        .pipe(envDev ? gutil.noop() : uglify())
+        .on('error', handleErrors)
+        .pipe(envDev ? gutil.noop() : header(config.banner))
+        .pipe(envDev ? gutil.noop() : rename({
+          suffix: '.min'
+        }))
+        .on('end', () => {
+          if (envDev) {
+            reload(() => {});
+          }
+        })
+        .pipe(gulp.dest(outputPath));
+
+
+    }
+
+
+    const stream = singleBundle();
+
+    if (envDev) {
+      bundler.on('update', singleBundle);
+    }
+
+    return stream;
+  });
+
+  es.merge.apply(null, streams)
+  .on('end', () => {
+    if (envDev) {
+      reload(() => {});
+    } else {
+      done();
+    }
+    bundleLogger.end();
+  });
 };
 
-if (envDev) {
-  bundler.on('update', bundle);
-}
 
 export function bundleApp(done) {
   if (envDev) {
